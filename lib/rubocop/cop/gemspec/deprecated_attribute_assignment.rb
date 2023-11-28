@@ -43,7 +43,7 @@ module RuboCop
         def on_block(block_node)
           return unless gem_specification(block_node)
 
-          block_parameter = block_node.arguments.first.source
+          block_parameter = block_node.first_argument.source
 
           assignment = block_node.descendants.detect do |node|
             use_deprecated_attributes?(node, block_parameter)
@@ -65,7 +65,7 @@ module RuboCop
             lhs, _op, _rhs = *node
             [lhs, attribute]
           else
-            [node, "#{attribute}=".to_sym]
+            [node, :"#{attribute}="]
           end
         end
 

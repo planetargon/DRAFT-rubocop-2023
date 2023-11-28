@@ -72,6 +72,21 @@ RSpec.describe RuboCop::Cop::Lint::SafeNavigationChain, :config do
       RUBY
     end
 
+    it 'registers an offense for ordinary method chain exists after safe navigation leading dot method call' do
+      expect_offense(<<~RUBY)
+        x&.foo
+         &.bar
+         .baz
+         ^^^^ Do not chain ordinary method call after safe navigation operator.
+      RUBY
+
+      expect_correction(<<~RUBY)
+        x&.foo
+         &.bar
+         &.baz
+      RUBY
+    end
+
     it 'registers an offense for ordinary method chain exists after ' \
        'safe navigation method call with an argument' do
       expect_offense(<<~RUBY)
@@ -153,6 +168,72 @@ RSpec.describe RuboCop::Cop::Lint::SafeNavigationChain, :config do
 
       expect_correction(<<~RUBY)
         x&.foo&. >= bar
+      RUBY
+    end
+
+    it 'registers an offense for safe navigation with a method call as an expression of `&&` operand' do
+      expect_offense(<<~RUBY)
+        do_something && x&.foo.bar
+                              ^^^^ Do not chain ordinary method call after safe navigation operator.
+      RUBY
+
+      expect_correction(<<~RUBY)
+        do_something && x&.foo&.bar
+      RUBY
+    end
+
+    it 'registers an offense for safe navigation with `>=` operator as an expression of `&&` operand' do
+      expect_offense(<<~RUBY)
+        do_something && x&.foo >= bar
+                              ^^^^^^^ Do not chain ordinary method call after safe navigation operator.
+      RUBY
+
+      expect_correction(<<~RUBY)
+        do_something && (x&.foo&. >= bar)
+      RUBY
+    end
+
+    it 'registers an offense for safe navigation with `>=` operator as an expression of `||` operand' do
+      expect_offense(<<~RUBY)
+        do_something || x&.foo >= bar
+                              ^^^^^^^ Do not chain ordinary method call after safe navigation operator.
+      RUBY
+
+      expect_correction(<<~RUBY)
+        do_something || (x&.foo&. >= bar)
+      RUBY
+    end
+
+    it 'registers an offense for safe navigation with `>=` operator as an expression of `and` operand' do
+      expect_offense(<<~RUBY)
+        do_something and x&.foo >= bar
+                               ^^^^^^^ Do not chain ordinary method call after safe navigation operator.
+      RUBY
+
+      expect_correction(<<~RUBY)
+        do_something and x&.foo&. >= bar
+      RUBY
+    end
+
+    it 'registers an offense for safe navigation with `>=` operator as an expression of `or` operand' do
+      expect_offense(<<~RUBY)
+        do_something or x&.foo >= bar
+                              ^^^^^^^ Do not chain ordinary method call after safe navigation operator.
+      RUBY
+
+      expect_correction(<<~RUBY)
+        do_something or x&.foo&. >= bar
+      RUBY
+    end
+
+    it 'registers an offense for safe navigation with `>=` operator as an expression of comparison method operand' do
+      expect_offense(<<~RUBY)
+        do_something == x&.foo >= bar
+                              ^^^^^^^ Do not chain ordinary method call after safe navigation operator.
+      RUBY
+
+      expect_correction(<<~RUBY)
+        do_something == (x&.foo&. >= bar)
       RUBY
     end
 

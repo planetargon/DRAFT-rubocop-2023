@@ -8,6 +8,11 @@ module RuboCop
       # `==`, `equal?`, and `eql?` custom method definitions are allowed by default.
       # These are customizable with `AllowedMethods` option.
       #
+      # @safety
+      #   This cop's autocorrection is unsafe because there is no guarantee that
+      #   the constant `Foo` exists when autocorrecting `var.class.name == 'Foo'` to
+      #   `var.instance_of?(Foo)`.
+      #
       # @example
       #   # bad
       #   var.class == Date
@@ -69,6 +74,8 @@ module RuboCop
                     matches_allowed_pattern?(def_node.method_name))
 
           class_comparison_candidate?(node) do |receiver_node, class_node|
+            return if class_node.dstr_type?
+
             range = offense_range(receiver_node, node)
             class_argument = (class_name = class_name(class_node, node)) ? "(#{class_name})" : ''
 

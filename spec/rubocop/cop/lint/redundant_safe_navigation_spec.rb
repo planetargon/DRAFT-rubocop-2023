@@ -3,6 +3,30 @@
 RSpec.describe RuboCop::Cop::Lint::RedundantSafeNavigation, :config do
   let(:cop_config) { { 'AllowedMethods' => %w[respond_to?] } }
 
+  it 'registers an offense and corrects when `&.` is used for camel case const receiver' do
+    expect_offense(<<~RUBY)
+      Const&.do_something
+           ^^^^^^^^^^^^^^ Redundant safe navigation detected.
+      ConstName&.do_something
+               ^^^^^^^^^^^^^^ Redundant safe navigation detected.
+      Const_name&.do_something # It is treated as camel case, similar to the `Naming/ConstantName` cop.
+                ^^^^^^^^^^^^^^ Redundant safe navigation detected.
+    RUBY
+
+    expect_correction(<<~RUBY)
+      Const.do_something
+      ConstName.do_something
+      Const_name.do_something # It is treated as camel case, similar to the `Naming/ConstantName` cop.
+    RUBY
+  end
+
+  it 'does not register an offense and corrects when `&.` is used for snake case const receiver' do
+    expect_no_offenses(<<~RUBY)
+      CONST&.do_something
+      CONST_NAME&.do_something
+    RUBY
+  end
+
   it 'registers an offense and corrects when `&.` is used inside `if` condition' do
     expect_offense(<<~RUBY)
       if foo&.respond_to?(:bar)
@@ -99,6 +123,102 @@ RSpec.describe RuboCop::Cop::Lint::RedundantSafeNavigation, :config do
       foo&.to_s || 'Default string'
       foo&.to_i || 1
       do_something if foo&.to_d
+    RUBY
+  end
+
+  it 'registers an offense and corrects when `.&` is used in `.to_h` conversion with default' do
+    expect_offense(<<~RUBY)
+      foo&.to_h || {}
+         ^^^^^^^^^^^^ Redundant safe navigation with default literal detected.
+    RUBY
+
+    expect_correction(<<~RUBY)
+      foo.to_h
+    RUBY
+  end
+
+  it 'registers an offense and corrects when `.&` is used in `.to_h` conversion having block with default' do
+    expect_offense(<<~RUBY)
+      foo&.to_h { |k, v| [k, v] } || {}
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Redundant safe navigation with default literal detected.
+    RUBY
+
+    expect_correction(<<~RUBY)
+      foo.to_h { |k, v| [k, v] }
+    RUBY
+  end
+
+  it 'does not register an offense when `.&` is used in `.to_h` conversion with incorrect default' do
+    expect_no_offenses(<<~RUBY)
+      foo&.to_h || { a: 1 }
+    RUBY
+  end
+
+  it 'registers an offense and corrects when `.&` is used in `.to_a` conversion with default' do
+    expect_offense(<<~RUBY)
+      foo&.to_a || []
+         ^^^^^^^^^^^^ Redundant safe navigation with default literal detected.
+    RUBY
+
+    expect_correction(<<~RUBY)
+      foo.to_a
+    RUBY
+  end
+
+  it 'does not register an offense when `.&` is used in `.to_a` conversion with incorrect default' do
+    expect_no_offenses(<<~RUBY)
+      foo&.to_a || [1]
+    RUBY
+  end
+
+  it 'registers an offense and corrects when `.&` is used in `.to_i` conversion with default' do
+    expect_offense(<<~RUBY)
+      foo&.to_i || 0
+         ^^^^^^^^^^^ Redundant safe navigation with default literal detected.
+    RUBY
+
+    expect_correction(<<~RUBY)
+      foo.to_i
+    RUBY
+  end
+
+  it 'does not register an offense when `.&` is used in `.to_i` conversion with incorrect default' do
+    expect_no_offenses(<<~RUBY)
+      foo&.to_i || 1
+    RUBY
+  end
+
+  it 'registers an offense and corrects when `.&` is used in `.to_f` conversion with default' do
+    expect_offense(<<~RUBY)
+      foo&.to_f || 0.0
+         ^^^^^^^^^^^^^ Redundant safe navigation with default literal detected.
+    RUBY
+
+    expect_correction(<<~RUBY)
+      foo.to_f
+    RUBY
+  end
+
+  it 'does not register an offense when `.&` is used in `.to_f` conversion with incorrect default' do
+    expect_no_offenses(<<~RUBY)
+      foo&.to_f || 1.0
+    RUBY
+  end
+
+  it 'registers an offense and corrects when `.&` is used in `.to_s` conversion with default' do
+    expect_offense(<<~RUBY)
+      foo&.to_s || ''
+         ^^^^^^^^^^^^ Redundant safe navigation with default literal detected.
+    RUBY
+
+    expect_correction(<<~RUBY)
+      foo.to_s
+    RUBY
+  end
+
+  it 'does not register an offense when `.&` is used in `.to_s` conversion with incorrect default' do
+    expect_no_offenses(<<~RUBY)
+      foo&.to_s || 'default'
     RUBY
   end
 end

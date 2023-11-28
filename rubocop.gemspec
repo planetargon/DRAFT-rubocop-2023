@@ -8,7 +8,7 @@ Gem::Specification.new do |s|
   s.platform = Gem::Platform::RUBY
   s.required_ruby_version = '>= 2.7.0'
   s.authors = ['Bozhidar Batsov', 'Jonas Arvidsson', 'Yuji Nakayama']
-  s.description = <<-DESCRIPTION
+  s.description = <<~DESCRIPTION
     RuboCop is a Ruby code style checking and code formatting tool.
     It aims to enforce the community-driven Ruby Style Guide.
   DESCRIPTION
@@ -34,11 +34,11 @@ Gem::Specification.new do |s|
   s.add_runtime_dependency('json', '~> 2.3')
   s.add_runtime_dependency('language_server-protocol', '>= 3.17.0')
   s.add_runtime_dependency('parallel', '~> 1.10')
-  s.add_runtime_dependency('parser', '>= 3.2.2.3')
+  s.add_runtime_dependency('parser', '>= 3.2.2.4')
   s.add_runtime_dependency('rainbow', '>= 2.2.2', '< 4.0')
   s.add_runtime_dependency('regexp_parser', '>= 1.8', '< 3.0')
   s.add_runtime_dependency('rexml', '>= 3.2.5', '< 4.0')
-  s.add_runtime_dependency('rubocop-ast', '>= 1.28.1', '< 2.0')
+  s.add_runtime_dependency('rubocop-ast', '>= 1.30.0', '< 2.0')
   s.add_runtime_dependency('ruby-progressbar', '~> 1.7')
   s.add_runtime_dependency('unicode-display_width', '>= 2.4.0', '< 3.0')
 end

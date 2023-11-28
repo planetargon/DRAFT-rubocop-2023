@@ -520,6 +520,28 @@ RSpec.describe 'RuboCop::CLI --autocorrect', :isolated_environment do # rubocop:
     RUBY
   end
 
+  it 'corrects `Naming/BlockForwarding` with `Style/ArgumentsForwarding`' do
+    create_file('.rubocop.yml', <<~YAML)
+      AllCops:
+        TargetRubyVersion: 3.2
+    YAML
+    source = <<~RUBY
+      def some_method(form, **options, &block)
+        render 'template', form: form, **options, &block
+      end
+    RUBY
+    create_file('example.rb', source)
+    expect(cli.run([
+                     '--autocorrect',
+                     '--only', 'Naming/BlockForwarding,Style/ArgumentsForwarding'
+                   ])).to eq(0)
+    expect(File.read('example.rb')).to eq(<<~RUBY)
+      def some_method(form, **, &)
+        render('template', form: form, **, &)
+      end
+    RUBY
+  end
+
   describe 'trailing comma cops' do
     let(:source) do
       <<~RUBY
@@ -2456,6 +2478,30 @@ RSpec.describe 'RuboCop::CLI --autocorrect', :isolated_environment do # rubocop:
     RUBY
   end
 
+  it 'corrects `Layout/RedundantLineBreak` and `Style/SingleLineMethods` offenses' do
+    create_file('.rubocop.yml', <<~YAML)
+      AllCops:
+        TargetRubyVersion: 2.7
+      Layout/RedundantLineBreak:
+        Enabled: true
+      Layout/SingleLineMethods:
+        Enabled: true
+    YAML
+
+    source_file = Pathname('example.rb')
+    create_file(source_file, <<~RUBY)
+      x def self.y; z end
+    RUBY
+
+    expect(cli.run(['-a', '--only', 'Layout/RedundantLineBreak,Style/SingleLineMethods'])).to eq(0)
+
+    expect(source_file.read).to eq(<<~RUBY)
+      x def self.y;#{' '}
+          z#{' '}
+        end
+    RUBY
+  end
+
   it 'corrects `Layout/DotPosition` and `Layout/SingleLineBlockChain` offenses' do
     source_file = Pathname('example.rb')
     create_file(source_file, <<~RUBY)
@@ -2657,6 +2703,21 @@ RSpec.describe 'RuboCop::CLI --autocorrect', :isolated_environment do # rubocop:
     expect(source_file.read).to eq(<<~RUBY)
       { foo: :bar }.transform_keys { |k| k.to_s }
       { foo: :bar }.transform_values { |v| v.to_s }
+    RUBY
+  end
+
+  it 'corrects `Style/MapToHash` and `Layout/SingleLineBlockChain` offenses' do
+    source_file = Pathname('example.rb')
+    create_file(source_file, <<~RUBY)
+      obj.map { |i| foo(i) }.to_h
+         .bar
+    RUBY
+
+    expect(cli.run(['-A', '--only', 'Style/MapToHash,Layout/SingleLineBlockChain'])).to eq(0)
+
+    expect(source_file.read).to eq(<<~RUBY)
+      obj.to_h { |i| foo(i) }
+         .bar
     RUBY
   end
 
@@ -2889,6 +2950,37 @@ RSpec.describe 'RuboCop::CLI --autocorrect', :isolated_environment do # rubocop:
     expect(status).to eq(1)
     expect(source_file.read).to eq(<<~RUBY)
       RSpec.configure do |config|
+      end
+    RUBY
+  end
+
+  it 'corrects `Lint/UselessAssignment` offenses when variables are assigned with chained assignment and unreferenced' do
+    source_file = Pathname('example.rb')
+    create_file(source_file, <<~RUBY)
+      def some_method
+        foo = bar = do_something
+      end
+    RUBY
+    status = cli.run(%w[--autocorrect-all --only Lint/UselessAssignment])
+    expect($stdout.string).to eq(<<~RESULT)
+      Inspecting 1 file
+      W
+
+      Offenses:
+
+      example.rb:2:3: W: [Corrected] Lint/UselessAssignment: Useless assignment to variable - bar.
+        bar = do_something
+        ^^^
+      example.rb:2:3: W: [Corrected] Lint/UselessAssignment: Useless assignment to variable - foo.
+        foo = bar = do_something
+        ^^^
+
+      1 file inspected, 2 offenses detected, 2 offenses corrected
+    RESULT
+    expect(status).to eq(0)
+    expect(source_file.read).to eq(<<~RUBY)
+      def some_method
+        do_something
       end
     RUBY
   end

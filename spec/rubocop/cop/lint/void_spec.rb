@@ -85,7 +85,7 @@ RSpec.describe RuboCop::Cop::Lint::Void, :config do
     end
   end
 
-  %w[var @var @@var VAR $var].each do |var|
+  %w[var @var @@var $var].each do |var|
     it "registers an offense for void var #{var} if not on last line" do
       expect_offense(<<~RUBY, var: var)
         %{var} = 5
@@ -99,6 +99,20 @@ RSpec.describe RuboCop::Cop::Lint::Void, :config do
         top
       RUBY
     end
+  end
+
+  it 'registers an offense for void constant `CONST` if not on last line' do
+    expect_offense(<<~RUBY)
+      CONST = 5
+      CONST
+      ^^^^^ Constant `CONST` used in void context.
+      top
+    RUBY
+
+    expect_correction(<<~RUBY)
+      CONST = 5
+      top
+    RUBY
   end
 
   %w(1 2.0 :test /test/ [1] {}).each do |lit|
@@ -373,6 +387,131 @@ RSpec.describe RuboCop::Cop::Lint::Void, :config do
     end
   end
 
+  it 'does not register an offense for an array literal that includes non-literal elements in a method definition' do
+    expect_no_offenses(<<~RUBY)
+      def something
+        [foo, bar]
+        baz
+      end
+    RUBY
+  end
+
+  it 'does not register an offense for a nested array literal that includes non-literal elements in a method definition' do
+    expect_no_offenses(<<~RUBY)
+      def something
+        [1, 2, [foo, bar]]
+        baz
+      end
+    RUBY
+  end
+
+  it 'registers an offense for an array literal composed entirely of literals in a method definition' do
+    expect_offense(<<~RUBY)
+      def something
+        [1, 2]
+        ^^^^^^ Literal `[1, 2]` used in void context.
+        baz
+      end
+    RUBY
+  end
+
+  it 'registers an offense for a nested array literal composed entirely of literals in a method definition' do
+    expect_offense(<<~RUBY)
+      def something
+        [1, 2, [3]]
+        ^^^^^^^^^^^ Literal `[1, 2, [3]]` used in void context.
+        baz
+      end
+    RUBY
+  end
+
+  it 'does not register an offense for a hash literal that includes non-literal value elements in a method definition' do
+    expect_no_offenses(<<~RUBY)
+      def something
+        {k1: foo, k2: bar}
+        baz
+      end
+    RUBY
+  end
+
+  it 'does not register an offense for a nested hash literal that includes non-literal value elements in a method definition' do
+    expect_no_offenses(<<~RUBY)
+      def something
+        {k0: {k1: foo, k2: bar}}
+        baz
+      end
+    RUBY
+  end
+
+  it 'does not register an offense for a hash literal that includes non-literal key elements in a method definition' do
+    expect_no_offenses(<<~RUBY)
+      def something
+        {foo => 1, bar => 2}
+        baz
+      end
+    RUBY
+  end
+
+  it 'does not register an offense for a nested hash literal that includes non-literal key elements in a method definition' do
+    expect_no_offenses(<<~RUBY)
+      def something
+        {foo: 1, bar: {baz => 2}}
+        baz
+      end
+    RUBY
+  end
+
+  it 'registers an offense for a hash literal composed entirely of literals in a method definition' do
+    expect_offense(<<~RUBY)
+      def something
+        {k1: 1, k2: 2}
+        ^^^^^^^^^^^^^^ Literal `{k1: 1, k2: 2}` used in void context.
+        baz
+      end
+    RUBY
+
+    expect_correction(<<~RUBY)
+      def something
+        baz
+      end
+    RUBY
+  end
+
+  it 'registers an offense for a nested hash literal composed entirely of literals in a method definition' do
+    expect_offense(<<~RUBY)
+      def something
+        {x: {k1: 1, k2: 2}}
+        ^^^^^^^^^^^^^^^^^^^ Literal `{x: {k1: 1, k2: 2}}` used in void context.
+        baz
+      end
+    RUBY
+
+    expect_correction(<<~RUBY)
+      def something
+        baz
+      end
+    RUBY
+  end
+
+  it 'does not register an offense for a hash literal that includes array literal key within non-literal elements in a method definition' do
+    expect_no_offenses(<<~RUBY)
+      def something
+        {[foo, bar] => :foo}
+        baz
+      end
+    RUBY
+  end
+
+  it 'registers an offense for a hash literal that includes array literal key within literal elements in a method definition' do
+    expect_offense(<<~RUBY)
+      def something
+        {[1, 2] => :foo}
+        ^^^^^^^^^^^^^^^^ Literal `{[1, 2] => :foo}` used in void context.
+        baz
+      end
+    RUBY
+  end
+
   it 'registers an offense for void literal in a method definition' do
     expect_offense(<<~RUBY)
       def something
@@ -437,6 +576,20 @@ RSpec.describe RuboCop::Cop::Lint::Void, :config do
     RUBY
   end
 
+  it 'registers an offenses for void constant in a `#each` method' do
+    expect_offense(<<~RUBY)
+      array.each do |_item|
+        CONST
+        ^^^^^ Constant `CONST` used in void context.
+      end
+    RUBY
+
+    expect_correction(<<~RUBY)
+      array.each do |_item|
+      end
+    RUBY
+  end
+
   it 'handles `#each` block with single expression' do
     expect_offense(<<~RUBY)
       array.each do |_item|
@@ -447,6 +600,16 @@ RSpec.describe RuboCop::Cop::Lint::Void, :config do
 
     expect_correction(<<~RUBY)
       array.each do |_item|
+      end
+    RUBY
+  end
+
+  it 'does not register `#each` block with conditional expression' do
+    expect_no_offenses(<<~RUBY)
+      enumerator_as_filter.each do |item|
+        # The `filter` method is used to filter for matches with `42`.
+        # In this case, it's not void.
+        item == 42
       end
     RUBY
   end

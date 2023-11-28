@@ -50,6 +50,14 @@ module RuboCop
         PERCENT_MSG = 'Use `%i` or `%I` for an array of symbols.'
         ARRAY_MSG = 'Use %<prefer>s for an array of symbols.'
         DELIMITERS = ['[', ']', '(', ')'].freeze
+        SPECIAL_GVARS = %w[
+          $! $" $$ $& $' $* $+ $, $/ $; $: $. $< $= $> $? $@ $\\ $_ $` $~ $0
+          $-0 $-F $-I $-K $-W $-a $-d $-i $-l $-p $-v $-w
+        ].freeze
+        REDEFINABLE_OPERATORS = %w(
+          | ^ & <=> == === =~ > >= < <= << >>
+          + - * / % ** ~ +@ -@ [] []= ` ! != !~
+        ).freeze
 
         class << self
           attr_accessor :largest_brackets
@@ -69,9 +77,11 @@ module RuboCop
 
         def complex_content?(node)
           node.children.any? do |sym|
-            content, = *sym
-            content = content.to_s
-            content_without_delimiter_pairs = content.gsub(/(\[\])|(\(\))/, '')
+            return false if DELIMITERS.include?(sym.source)
+
+            content = *sym
+            content = content.map { |c| c.is_a?(AST::Node) ? c.source : c }.join
+            content_without_delimiter_pairs = content.gsub(/(\[[^\s\[\]]*\])|(\([^\s\(\)]*\))/, '')
 
             content.include?(' ') || DELIMITERS.any? do |delimiter|
               content_without_delimiter_pairs.include?(delimiter)
@@ -107,15 +117,6 @@ module RuboCop
         end
 
         def symbol_without_quote?(string)
-          special_gvars = %w[
-            $! $" $$ $& $' $* $+ $, $/ $; $: $. $< $= $> $? $@ $\\ $_ $` $~ $0
-            $-0 $-F $-I $-K $-W $-a $-d $-i $-l $-p $-v $-w
-          ]
-          redefinable_operators = %w(
-            | ^ & <=> == === =~ > >= < <= << >>
-            + - * / % ** ~ +@ -@ [] []= ` ! != !~
-          )
-
           # method name
           /\A[a-zA-Z_]\w*[!?]?\z/.match?(string) ||
             # instance / class variable
@@ -123,8 +124,8 @@ module RuboCop
             # global variable
             /\A\$[1-9]\d*\z/.match?(string) ||
             /\A\$[a-zA-Z_]\w*\z/.match?(string) ||
-            special_gvars.include?(string) ||
-            redefinable_operators.include?(string)
+            SPECIAL_GVARS.include?(string) ||
+            REDEFINABLE_OPERATORS.include?(string)
         end
       end
     end

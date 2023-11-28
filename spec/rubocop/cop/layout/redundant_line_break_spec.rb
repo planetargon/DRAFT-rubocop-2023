@@ -100,6 +100,14 @@ RSpec.describe RuboCop::Cop::Layout::RedundantLineBreak, :config do
         RUBY
       end
 
+      it 'accepts a modified singleton method definition' do
+        expect_no_offenses(<<~RUBY)
+          x def self.y
+              z
+            end
+        RUBY
+      end
+
       it 'accepts a method call on a single line' do
         expect_no_offenses(<<~RUBY)
           my_method(1, 2, "x")
@@ -371,6 +379,13 @@ RSpec.describe RuboCop::Cop::Layout::RedundantLineBreak, :config do
           my_method(111111 +
                     222222 +
                     333333)
+        RUBY
+      end
+
+      it 'accepts a quoted symbol with a single newline' do
+        expect_no_offenses(<<~RUBY)
+          foo(:"
+          ")
         RUBY
       end
 

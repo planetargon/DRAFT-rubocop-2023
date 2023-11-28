@@ -263,7 +263,7 @@ RSpec.describe RuboCop::TargetFinder, :isolated_environment do
 
       context 'when local AllCops/Include lists two patterns' do
         before do
-          create_file('.rubocop.yml', <<-YAML)
+          create_file('.rubocop.yml', <<~YAML)
             AllCops:
               Include:
                 - '**/*.rb'
@@ -277,7 +277,7 @@ RSpec.describe RuboCop::TargetFinder, :isolated_environment do
 
         context 'when a subdirectory AllCops/Include only lists one pattern' do
           before do
-            create_file('dir2/.rubocop.yml', <<-YAML)
+            create_file('dir2/.rubocop.yml', <<~YAML)
               AllCops:
                 Include:
                   - '**/*.ruby'
@@ -345,7 +345,7 @@ RSpec.describe RuboCop::TargetFinder, :isolated_environment do
 
       context 'when local AllCops/Include lists two patterns' do
         before do
-          create_file('.rubocop.yml', <<-YAML)
+          create_file('.rubocop.yml', <<~YAML)
             AllCops:
               Include:
                 - '**/*.rb'
@@ -357,7 +357,7 @@ RSpec.describe RuboCop::TargetFinder, :isolated_environment do
 
         context 'when a subdirectory AllCops/Include only lists one pattern' do
           before do
-            create_file('dir2/.rubocop.yml', <<-YAML)
+            create_file('dir2/.rubocop.yml', <<~YAML)
               AllCops:
                 Include:
                   - '**/*.ruby'
@@ -510,18 +510,16 @@ RSpec.describe RuboCop::TargetFinder, :isolated_environment do
     end
 
     it 'can exclude symlinks as well as directories' do
-      Dir.mktmpdir do |tmpdir|
-        create_empty_file(File.join(tmpdir, 'ruby5.rb'))
-        create_link('link', tmpdir)
+      create_empty_file(File.join(Dir.home, 'ruby5.rb'))
+      create_link('link', Dir.home)
 
-        config = instance_double(RuboCop::Config)
-        exclude_property = { 'Exclude' => [File.expand_path('link/**/*')] }
-        allow(config).to receive(:for_all_cops).and_return(exclude_property)
-        allow(config_store).to receive(:for).and_return(config)
+      config = instance_double(RuboCop::Config)
+      exclude_property = { 'Exclude' => [File.expand_path('link/**/*')] }
+      allow(config).to receive(:for_all_cops).and_return(exclude_property)
+      allow(config_store).to receive(:for).and_return(config)
 
-        expect(found_basenames.include?('ruby5.rb')).to be(false)
-        expect(found_basenames.include?('ruby3.rb')).to be(true)
-      end
+      expect(found_basenames.include?('ruby5.rb')).to be(false)
+      expect(found_basenames.include?('ruby3.rb')).to be(true)
     end
   end
 
@@ -554,12 +552,12 @@ RSpec.describe RuboCop::TargetFinder, :isolated_environment do
       allow(config).to receive(:file_to_include?) do |file|
         File.basename(file) == 'file'
       end
-      allow(config)
-        .to receive(:for_all_cops).and_return('Exclude' => [],
-                                              'Include' => [],
-                                              'RubyInterpreters' => [])
-      allow(config).to receive(:[]).and_return([])
-      allow(config).to receive(:file_to_exclude?).and_return(false)
+      allow(config).to receive_messages(
+        for_all_cops: { 'Exclude' => [], 'Include' => [], 'RubyInterpreters' => [] },
+        :[] => [],
+        file_to_exclude?: false
+      )
+
       allow(config_store).to receive(:for).and_return(config)
 
       expect(found_basenames.include?('file')).to be(true)
@@ -567,11 +565,11 @@ RSpec.describe RuboCop::TargetFinder, :isolated_environment do
 
     it 'does not pick files specified to be excluded in config' do
       config = instance_double(RuboCop::Config).as_null_object
-      allow(config)
-        .to receive(:for_all_cops).and_return('Exclude' => [],
-                                              'Include' => [],
-                                              'RubyInterpreters' => [])
-      allow(config).to receive(:file_to_include?).and_return(false)
+      allow(config).to receive_messages(
+        for_all_cops: { 'Exclude' => [], 'Include' => [], 'RubyInterpreters' => [] },
+        file_to_include?: false
+      )
+
       allow(config).to receive(:file_to_exclude?) do |file|
         File.basename(file) == 'ruby2.rb'
       end

@@ -22,9 +22,14 @@ module RuboCop
       #     return something
       #   end
       #
-      #   # good
+      #   # bad
       #   def test
       #     return something if something_else
+      #   end
+      #
+      #   # good
+      #   def test
+      #     something if something_else
       #   end
       #
       #   # good
@@ -53,7 +58,7 @@ module RuboCop
 
         MSG = 'Redundant `return` detected.'
         MULTI_RETURN_MSG = 'To return multiple values, use an array.'
-        RESTRICT_ON_SEND = %i[define_method define_singleton_method].freeze
+        RESTRICT_ON_SEND = %i[define_method define_singleton_method lambda].freeze
 
         def on_send(node)
           return unless (parent = node.parent) && parent.block_type?
@@ -136,7 +141,7 @@ module RuboCop
         end
 
         def check_if_node(node)
-          return if node.modifier_form? || node.ternary?
+          return if node.ternary?
 
           check_branch(node.if_branch)
           check_branch(node.else_branch)

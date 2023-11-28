@@ -12,7 +12,16 @@ module RuboCop
       #
       # This cop also identifies places where `use_args(*args)`/`use_kwargs(**kwargs)` can be
       # replaced by `use_args(*)`/`use_kwargs(**)`; if desired, this functionality can be disabled
-      # by setting UseAnonymousForwarding: false.
+      # by setting `UseAnonymousForwarding: false`.
+      #
+      # And this cop has `RedundantRestArgumentNames`, `RedundantKeywordRestArgumentNames`,
+      # and `RedundantBlockArgumentNames` options. This configuration is a list of redundant names
+      # that are sufficient for anonymizing meaningless naming.
+      #
+      # Meaningless names that are commonly used can be anonymized by default:
+      # e.g., `*args`, `**options`, `&block`, and so on.
+      #
+      # Names not on this list are likely to be meaningful and are allowed by default.
       #
       # @example
       #   # bad
@@ -72,6 +81,38 @@ module RuboCop
       #     bar(**kwargs)
       #   end
       #
+      # @example RedundantRestArgumentNames: ['args', 'arguments'] (default)
+      #   # bad
+      #   def foo(*args)
+      #     bar(*args)
+      #   end
+      #
+      #   # good
+      #   def foo(*)
+      #     bar(*)
+      #   end
+      #
+      # @example RedundantKeywordRestArgumentNames: ['kwargs', 'options', 'opts'] (default)
+      #   # bad
+      #   def foo(**kwargs)
+      #     bar(**kwargs)
+      #   end
+      #
+      #   # good
+      #   def foo(**)
+      #     bar(**)
+      #   end
+      #
+      # @example RedundantBlockArgumentNames: ['blk', 'block', 'proc'] (default)
+      #   # bad
+      #   def foo(&block)
+      #     bar(&block)
+      #   end
+      #
+      #   # good
+      #   def foo(&)
+      #     bar(&)
+      #   end
       class ArgumentsForwarding < Base
         include RangeHelp
         extend AutoCorrector
@@ -80,27 +121,31 @@ module RuboCop
         minimum_target_ruby_version 2.7
 
         FORWARDING_LVAR_TYPES = %i[splat kwsplat block_pass].freeze
+        ADDITIONAL_ARG_TYPES = %i[lvar arg].freeze
 
         FORWARDING_MSG = 'Use shorthand syntax `...` for arguments forwarding.'
         ARGS_MSG = 'Use anonymous positional arguments forwarding (`*`).'
         KWARGS_MSG = 'Use anonymous keyword arguments forwarding (`**`).'
 
+        def self.autocorrect_incompatible_with
+          [Naming::BlockForwarding]
+        end
+
         def on_def(node)
           return unless node.body
 
-          forwardable_args = extract_forwardable_args(node.arguments)
+          restarg, kwrestarg, blockarg = extract_forwardable_args(node.arguments)
+          forwardable_args = redundant_forwardable_named_args(restarg, kwrestarg, blockarg)
+          send_nodes = node.each_descendant(:send).to_a
 
           send_classifications = classify_send_nodes(
-            node,
-            node.each_descendant(:send).to_a,
-            non_splat_or_block_pass_lvar_references(node.body),
-            forwardable_args
+            node, send_nodes, non_splat_or_block_pass_lvar_references(node.body), forwardable_args
           )
 
           return if send_classifications.empty?
 
           if only_forwards_all?(send_classifications)
-            add_forward_all_offenses(node, send_classifications)
+            add_forward_all_offenses(node, send_classifications, forwardable_args)
           elsif target_ruby_version >= 3.2
             add_post_ruby_32_offenses(node, send_classifications, forwardable_args)
           end
@@ -114,16 +159,25 @@ module RuboCop
           [args.find(&:restarg_type?), args.find(&:kwrestarg_type?), args.find(&:blockarg_type?)]
         end
 
-        def only_forwards_all?(send_classifications)
-          send_classifications.each_value.all? { |c, _, _| c == :all }
+        def redundant_forwardable_named_args(restarg, kwrestarg, blockarg)
+          restarg_node = redundant_named_arg(restarg, 'RedundantRestArgumentNames', '*')
+          kwrestarg_node = redundant_named_arg(kwrestarg, 'RedundantKeywordRestArgumentNames', '**')
+          blockarg_node = redundant_named_arg(blockarg, 'RedundantBlockArgumentNames', '&')
+
+          [restarg_node, kwrestarg_node, blockarg_node]
         end
 
-        def add_forward_all_offenses(node, send_classifications)
-          send_classifications.each_key do |send_node|
-            register_forward_all_offense_on_forwarding_method(send_node)
+        def only_forwards_all?(send_classifications)
+          send_classifications.all? { |_, c, _, _| c == :all }
+        end
+
+        def add_forward_all_offenses(node, send_classifications, forwardable_args)
+          send_classifications.each do |send_node, _c, forward_rest, _forward_kwrest|
+            register_forward_all_offense(send_node, send_node, forward_rest)
           end
 
-          register_forward_all_offense_on_method_def(node)
+          rest_arg, _kwrest_arg, _block_arg = *forwardable_args
+          register_forward_all_offense(node, node.arguments, rest_arg)
         end
 
         def add_post_ruby_32_offenses(def_node, send_classifications, forwardable_args)
@@ -131,7 +185,7 @@ module RuboCop
 
           rest_arg, kwrest_arg, _block_arg = *forwardable_args
 
-          send_classifications.each do |send_node, (_c, forward_rest, forward_kwrest)|
+          send_classifications.each do |send_node, _c, forward_rest, forward_kwrest|
             if forward_rest
               register_forward_args_offense(def_node.arguments, rest_arg)
               register_forward_args_offense(send_node, forward_rest)
@@ -155,7 +209,7 @@ module RuboCop
         end
 
         def classify_send_nodes(def_node, send_nodes, referenced_lvars, forwardable_args)
-          send_nodes.to_h do |send_node|
+          send_nodes.filter_map do |send_node|
             classification_and_forwards = classification_and_forwards(
               def_node,
               send_node,
@@ -163,8 +217,10 @@ module RuboCop
               forwardable_args
             )
 
-            [send_node, classification_and_forwards]
-          end.compact
+            next unless classification_and_forwards
+
+            [send_node, *classification_and_forwards]
+          end
         end
 
         def classification_and_forwards(def_node, send_node, referenced_lvars, forwardable_args)
@@ -184,11 +240,19 @@ module RuboCop
           [classification, classifier.forwarded_rest_arg, classifier.forwarded_kwrest_arg]
         end
 
+        def redundant_named_arg(arg, config_name, keyword)
+          return nil unless arg
+
+          redundant_arg_names = cop_config.fetch(config_name, []).map do |redundant_arg_name|
+            "#{keyword}#{redundant_arg_name}"
+          end << keyword
+
+          redundant_arg_names.include?(arg.source) ? arg : nil
+        end
+
         def register_forward_args_offense(def_arguments_or_send, rest_arg_or_splat)
           add_offense(rest_arg_or_splat, message: ARGS_MSG) do |corrector|
-            unless parentheses?(def_arguments_or_send)
-              add_parentheses(def_arguments_or_send, corrector)
-            end
+            add_parens_if_missing(def_arguments_or_send, corrector)
 
             corrector.replace(rest_arg_or_splat, '*')
           end
@@ -196,36 +260,28 @@ module RuboCop
 
         def register_forward_kwargs_offense(add_parens, def_arguments_or_send, kwrest_arg_or_splat)
           add_offense(kwrest_arg_or_splat, message: KWARGS_MSG) do |corrector|
-            if add_parens && !parentheses?(def_arguments_or_send)
-              add_parentheses(def_arguments_or_send, corrector)
-            end
+            add_parens_if_missing(def_arguments_or_send, corrector) if add_parens
 
             corrector.replace(kwrest_arg_or_splat, '**')
           end
         end
 
-        def register_forward_all_offense_on_forwarding_method(forwarding_method)
-          add_offense(arguments_range(forwarding_method), message: FORWARDING_MSG) do |corrector|
-            begin_pos = forwarding_method.loc.selector&.end_pos || forwarding_method.loc.dot.end_pos
-            range = range_between(begin_pos, forwarding_method.source_range.end_pos)
+        def register_forward_all_offense(def_or_send, send_or_arguments, rest_or_splat)
+          arg_range = arguments_range(def_or_send, rest_or_splat)
 
-            corrector.replace(range, '(...)')
+          add_offense(arg_range, message: FORWARDING_MSG) do |corrector|
+            add_parens_if_missing(send_or_arguments, corrector)
+
+            corrector.replace(arg_range, '...')
           end
         end
 
-        def register_forward_all_offense_on_method_def(method_definition)
-          add_offense(arguments_range(method_definition), message: FORWARDING_MSG) do |corrector|
-            arguments_range = range_with_surrounding_space(
-              method_definition.arguments.source_range, side: :left
-            )
-            corrector.replace(arguments_range, '(...)')
-          end
-        end
+        def arguments_range(node, first_node)
+          arguments = node.arguments.reject { |arg| ADDITIONAL_ARG_TYPES.include?(arg.type) }
 
-        def arguments_range(node)
-          arguments = node.arguments
+          start_node = first_node || arguments.first
 
-          range_between(arguments.first.source_range.begin_pos, arguments.last.source_range.end_pos)
+          range_between(start_node.source_range.begin_pos, arguments.last.source_range.end_pos)
         end
 
         def allow_only_rest_arguments?
@@ -236,18 +292,24 @@ module RuboCop
           cop_config.fetch('UseAnonymousForwarding', false)
         end
 
+        def add_parens_if_missing(node, corrector)
+          return if parentheses?(node)
+
+          add_parentheses(node, corrector)
+        end
+
         # Classifies send nodes for possible rest/kwrest/all (including block) forwarding.
         class SendNodeClassifier
           extend NodePattern::Macros
 
-          # @!method find_forwarded_rest_arg(node, rest_name)
-          def_node_search :find_forwarded_rest_arg, '(splat (lvar %1))'
+          # @!method forwarded_rest_arg?(node, rest_name)
+          def_node_matcher :forwarded_rest_arg?, '(splat (lvar %1))'
 
-          # @!method find_forwarded_kwrest_arg(node, kwrest_name)
-          def_node_search :find_forwarded_kwrest_arg, '(kwsplat (lvar %1))'
+          # @!method extract_forwarded_kwrest_arg(node, kwrest_name)
+          def_node_matcher :extract_forwarded_kwrest_arg, '(hash <$(kwsplat (lvar %1)) ...>)'
 
-          # @!method find_forwarded_block_arg(node, block_name)
-          def_node_search :find_forwarded_block_arg, '(block_pass {(lvar %1) nil?})'
+          # @!method forwarded_block_arg?(node, block_name)
+          def_node_matcher :forwarded_block_arg?, '(block_pass {(lvar %1) nil?})'
 
           def initialize(def_node, send_node, referenced_lvars, forwardable_args, **config)
             @def_node = def_node
@@ -262,32 +324,57 @@ module RuboCop
           def forwarded_rest_arg
             return nil if referenced_rest_arg?
 
-            find_forwarded_rest_arg(@send_node, @rest_arg_name).first
+            arguments.find { |arg| forwarded_rest_arg?(arg, @rest_arg_name) }
           end
 
           def forwarded_kwrest_arg
             return nil if referenced_kwrest_arg?
 
-            find_forwarded_kwrest_arg(@send_node, @kwrest_arg_name).first
+            arguments.filter_map { |arg| extract_forwarded_kwrest_arg(arg, @kwrest_arg_name) }.first
           end
 
           def forwarded_block_arg
             return nil if referenced_block_arg?
 
-            find_forwarded_block_arg(@send_node, @block_arg_name).first
+            arguments.find { |arg| forwarded_block_arg?(arg, @block_arg_name) }
           end
 
           def classification
             return nil unless forwarded_rest_arg || forwarded_kwrest_arg
 
-            if referenced_none? && (forwarded_exactly_all? || pre_ruby_32_allow_forward_all?)
+            if can_forward_all?
               :all
-            elsif target_ruby_version >= 3.2
+            else
               :rest_or_kwrest
             end
           end
 
           private
+
+          def can_forward_all?
+            return false if any_arg_referenced?
+            return false if ruby_32_missing_rest_or_kwest?
+            return false unless offensive_block_forwarding?
+            return false if additional_kwargs_or_forwarded_kwargs?
+
+            no_additional_args? || (target_ruby_version >= 3.0 && no_post_splat_args?)
+          end
+
+          def ruby_32_missing_rest_or_kwest?
+            target_ruby_version >= 3.2 && !forwarded_rest_and_kwrest_args
+          end
+
+          def offensive_block_forwarding?
+            @block_arg ? forwarded_block_arg : allow_offense_for_no_block?
+          end
+
+          def forwarded_rest_and_kwrest_args
+            forwarded_rest_arg && forwarded_kwrest_arg
+          end
+
+          def arguments
+            @send_node.arguments
+          end
 
           def referenced_rest_arg?
             @referenced_lvars.include?(@rest_arg_name)
@@ -301,25 +388,44 @@ module RuboCop
             @referenced_lvars.include?(@block_arg_name)
           end
 
-          def referenced_none?
-            !(referenced_rest_arg? || referenced_kwrest_arg? || referenced_block_arg?)
-          end
-
-          def forwarded_exactly_all?
-            @send_node.arguments.size == 3 &&
-              forwarded_rest_arg &&
-              forwarded_kwrest_arg &&
-              forwarded_block_arg
+          def any_arg_referenced?
+            referenced_rest_arg? || referenced_kwrest_arg? || referenced_block_arg?
           end
 
           def target_ruby_version
             @config.fetch(:target_ruby_version)
           end
 
-          def pre_ruby_32_allow_forward_all?
-            target_ruby_version < 3.2 &&
-              @def_node.arguments.none?(&:default?) &&
-              (@block_arg ? forwarded_block_arg : !@config.fetch(:allow_only_rest_arguments))
+          def no_post_splat_args?
+            return true unless (splat_index = arguments.index(forwarded_rest_arg))
+
+            arg_after_splat = arguments[splat_index + 1]
+            [nil, :hash, :block_pass].include?(arg_after_splat&.type)
+          end
+
+          def additional_kwargs_or_forwarded_kwargs?
+            additional_kwargs? || forward_additional_kwargs?
+          end
+
+          def additional_kwargs?
+            @def_node.arguments.any? { |a| a.kwarg_type? || a.kwoptarg_type? }
+          end
+
+          def forward_additional_kwargs?
+            return false unless forwarded_kwrest_arg
+
+            !forwarded_kwrest_arg.parent.children.one?
+          end
+
+          def allow_offense_for_no_block?
+            !@config.fetch(:allow_only_rest_arguments)
+          end
+
+          def no_additional_args?
+            forwardable_count = [@rest_arg, @kwrest_arg, @block_arg].compact.size
+
+            @def_node.arguments.size == forwardable_count &&
+              @send_node.arguments.size == forwardable_count
           end
         end
       end

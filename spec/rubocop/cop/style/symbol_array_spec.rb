@@ -88,7 +88,11 @@ RSpec.describe RuboCop::Cop::Style::SymbolArray, :config do
     end
 
     it 'does not register an offense for array containing delimiters without spaces' do
-      expect_no_offenses('%i[one two [] ()]')
+      expect_no_offenses('%i[zero (one) [two] three[4] five[six] seven(8) nine(ten) ([]) [] ()]')
+    end
+
+    it 'does not register an offense for a percent array with interpolations' do
+      expect_no_offenses('%I[one_#{two} three #{four}_five six#{seven}eight [nine_#{ten}]]')
     end
 
     it 'does not register an offense if symbol contains whitespace' do
@@ -134,7 +138,7 @@ RSpec.describe RuboCop::Cop::Style::SymbolArray, :config do
       expect(cop.config_to_allow_offenses).to eq('Enabled' => false)
     end
 
-    it 'registers an offense for a %i array containing [ ]' do
+    it 'registers an offense for a %i array containing escaped [ ]' do
       expect_offense(<<~'RUBY')
         %i[one \[ \] two]
         ^^^^^^^^^^^^^^^^^ Use `[:one, :'[', :']', :two]` for an array of symbols.
@@ -145,7 +149,35 @@ RSpec.describe RuboCop::Cop::Style::SymbolArray, :config do
       RUBY
     end
 
-    it 'registers an offense for a %i array containing ( )' do
+    it 'does not register an offense for a %i array containing unescaped [ ]' do
+      expect_no_offenses(<<~RUBY)
+        %i(one [ ] two)
+      RUBY
+    end
+
+    it 'registers an offense for a %i array containing whitespace between brackets' do
+      expect_offense(<<~'RUBY')
+        %i[one two \[three\ four\ five\]]
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Use `[:one, :two, :'[three four five]']` for an array of symbols.
+      RUBY
+
+      expect_correction(<<~RUBY)
+        [:one, :two, :'[three four five]']
+      RUBY
+    end
+
+    it 'registers an offense for a %i array containing brackets between brackets' do
+      expect_offense(<<~'RUBY')
+        %i[one two \[\[\]]
+        ^^^^^^^^^^^^^^^^^^ Use `[:one, :two, :'[[]']` for an array of symbols.
+      RUBY
+
+      expect_correction(<<~RUBY)
+        [:one, :two, :'[[]']
+      RUBY
+    end
+
+    it 'registers an offense for a %i array containing escaped ( )' do
       expect_offense(<<~'RUBY')
         %i(one \( \) two)
         ^^^^^^^^^^^^^^^^^ Use `[:one, :'(', :')', :two]` for an array of symbols.
@@ -153,6 +185,34 @@ RSpec.describe RuboCop::Cop::Style::SymbolArray, :config do
 
       expect_correction(<<~RUBY)
         [:one, :'(', :')', :two]
+      RUBY
+    end
+
+    it 'does not register an offense for a %i array containing unescaped ( )' do
+      expect_no_offenses(<<~RUBY)
+        %i[one ( ) two]
+      RUBY
+    end
+
+    it 'registers an offense for a %i array containing parentheses between parentheses' do
+      expect_offense(<<~'RUBY')
+        %i(one two \(\(\))
+        ^^^^^^^^^^^^^^^^^^ Use `[:one, :two, :'(()']` for an array of symbols.
+      RUBY
+
+      expect_correction(<<~RUBY)
+        [:one, :two, :'(()']
+      RUBY
+    end
+
+    it 'registers an offense for a %i array containing whitespace between parentheses' do
+      expect_offense(<<~'RUBY')
+        %i(one two \(three\ four\ five\))
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Use `[:one, :two, :'(three four five)']` for an array of symbols.
+      RUBY
+
+      expect_correction(<<~RUBY)
+        [:one, :two, :'(three four five)']
       RUBY
     end
 
@@ -168,7 +228,7 @@ RSpec.describe RuboCop::Cop::Style::SymbolArray, :config do
       end
 
       it 'autocorrects an array in multiple lines' do
-        expect_offense(<<-RUBY)
+        expect_offense(<<~RUBY)
           [
           ^ Use `%i` or `%I` for an array of symbols.
           :foo,
@@ -177,7 +237,7 @@ RSpec.describe RuboCop::Cop::Style::SymbolArray, :config do
           ]
         RUBY
 
-        expect_correction(<<-RUBY)
+        expect_correction(<<~RUBY)
           %i[
           foo
           bar
@@ -187,14 +247,14 @@ RSpec.describe RuboCop::Cop::Style::SymbolArray, :config do
       end
 
       it 'autocorrects an array using partial newlines' do
-        expect_offense(<<-RUBY)
+        expect_offense(<<~RUBY)
           [:foo, :bar, :baz,
           ^^^^^^^^^^^^^^^^^^ Use `%i` or `%I` for an array of symbols.
           :boz, :buz,
           :biz]
         RUBY
 
-        expect_correction(<<-RUBY)
+        expect_correction(<<~RUBY)
           %i[foo bar baz
           boz buz
           biz]

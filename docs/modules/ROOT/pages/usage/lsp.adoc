@@ -22,6 +22,8 @@ https://github.com/rubocop/vscode-rubocop[vscode-rubocop] integrates RuboCop int
 
 You can install this VS Code extension from the https://marketplace.visualstudio.com/items?itemName=rubocop.vscode-rubocop[Visual Studio Marketplace].
 
+For VS Code-based IDEs like VSCodium or Eclipse Theia, the extension can be installed from the https://open-vsx.org/extension/rubocop/vscode-rubocop[Open VSX Registry].
+
 === Emacs (Eglot)
 
 https://github.com/joaotavora/eglot[Eglot] is a client for Language Server Protocol servers on Emacs.
@@ -44,6 +46,15 @@ Below is an example of additional setting for autocorrecting on save:
 If you run into problems, first use "M-x eglot-reconnect" to reconnect to the language server.
 
 See Eglot's official documentation for more information.
+
+=== Emacs (LSP Mode)
+
+https://github.com/emacs-lsp/lsp-mode[LSP Mode] is an Emacs client/library for the Language Server Protocol.
+
+You can get the new `lsp-mode` package from https://melpa.org/#/lsp-mode[MELPA].
+
+See LSP Mode official documentation for more information:
+https://emacs-lsp.github.io/lsp-mode/page/lsp-rubocop/
 
 === Vim and Neovim (coc.nvim)
 
@@ -109,6 +120,56 @@ vim.api.nvim_create_autocmd("BufWritePre", {
 
 See nvim-lspconfig's official documentation for more information.
 
+=== Helix
+
+https://github.com/helix-editor/helix[Helix] is a post-modern modal text editor with built-in language server support.
+
+Add the following to your Helix language configuration file (e.g. `~/.config/helix/languages.toml`):
+
+Helix 23.10 or later:
+
+```toml
+[language-server.rubocop]
+command = "bundle"
+args = ["exec", "rubocop", "--lsp"]
+
+[[language]]
+name = "ruby"
+auto-format = true
+language-servers = [
+  { name = "rubocop" }
+]
+```
+
+Before Helix 23.10 or earlier:
+
+```toml
+[[language]]
+name = "ruby"
+language-server = { command = "bundle", args = ["exec", "rubocop", "--lsp"] }
+auto-format = true
+```
+
+See Helix's official documentation for more information:
+https://docs.helix-editor.com/languages.html
+
+=== Sublime Text
+
+For https://www.sublimetext.com/[Sublime Text] LSP support is available through the https://github.com/sublimelsp/LSP[Sublime-LSP] plugin.
+Add the following to its settings (accessible via `Preferences → Package Settings → LSP → Settings`) to enable RuboCop:
+
+```json
+{
+    "clients": {
+        "rubocop": {
+            "enabled": true,
+            "command": ["bundle", "exec", "rubocop", "--lsp"],
+            "selector": "source.ruby | text.html.ruby | text.html.rails",
+        },
+    },
+}
+```
+
 == Autocorrection
 
 The language server supports `textDocument/formatting` method and is autocorrectable. The autocorrection is safe by default (`rubocop -a`).
@@ -131,6 +192,12 @@ LSP client can switch to unsafe autocorrection (`rubocop -A`) by passing the fol
 For detailed instructions on setting the parameter, please refer to the configuration methods of your LSP client.
 
 NOTE: The `safeAutocorrect` parameter was introduced in RuboCop 1.54.
+
+As execute commands in the `workspace/executeCommand` parameters, it provides `rubocop.formatAutocorrects` for safe autocorrections (`rubocop -a`) and
+`rubocop.formatAutocorrectsAll` for unsafe autocorrections (`rubocop -A`).
+These parameters take precedence over the `initializationOptions:safeAutocorrect` value set in the `initialize` parameter.
+
+NOTE: The `rubocop.formatAutocorrectsAll` execute command was introduced in RuboCop 1.56.
 
 == Lint Mode
 

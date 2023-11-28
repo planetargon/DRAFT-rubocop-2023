@@ -17,11 +17,11 @@ RSpec.describe RuboCop::Cop::Registry do
   let(:options) { {} }
 
   before do
-    stub_const('RuboCop::Cop::Test::FirstArrayElementIndentation', Class.new(RuboCop::Cop::Cop))
-    stub_const('RuboCop::Cop::RSpec::Foo', Class.new(RuboCop::Cop::Cop))
+    stub_const('RuboCop::Cop::Test::FirstArrayElementIndentation', Class.new(RuboCop::Cop::Base))
+    stub_const('RuboCop::Cop::RSpec::Foo', Class.new(RuboCop::Cop::Base))
   end
 
-  # `RuboCop::Cop::Cop` mutates its `registry` when inherited from.
+  # `RuboCop::Cop::Base` mutates its `registry` when inherited from.
   # This can introduce nondeterministic failures in other parts of the
   # specs if this mutation occurs before code that depends on this global cop
   # store. The workaround is to replace the global cop store with a temporary
